@@ -1,0 +1,34 @@
+app:
+  rpc:
+    command: .
+    private_key:
+      _default: -----BEGIN OPENSSH PRIVATE KEY-----
+        -----END OPENSSH PRIVATE KEY-----
+    public_key:
+      _default: ssh-rsa == builder@veverse.com
+  db:
+    host:
+      _default: "localhost"
+      dev: "db.example.com"
+      test: "db.example.com"
+      prod: "db.example.com"
+    port:
+      _default: "5432"
+      dev: "5432"
+      test: "5432"
+      prod: "5432"
+    user:
+      _default: "postgres"
+      dev: "dev"
+      test: "test"
+      prod: "prod"
+    name:
+      _default: "dev"
+      dev: "dev"
+      test: "test"
+      prod: "prod"
+    password:
+      _default: "postgres"
+      dev: "password"
+      test: "password"
+      prod: "password"

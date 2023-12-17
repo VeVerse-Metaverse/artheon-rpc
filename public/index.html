@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <style type="text/css">
+        .container {
+            display: flex;
+            flex-direction: row;
+        }
+
+        .half {
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 50%;
+        }
+
+        pre {
+            background-color: lightgray;
+            border: 1px solid gray;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="half">
+        <div>
+            <h3>Authenticate</h3>
+            <label>
+                User Key
+                <input id="userKey" type="password" value="">
+            </label>
+            <button id="connect">Authenticate</button>
+        </div>
+        <div>
+            <h3>Channel Subscriptions</h3>
+            <h4>General Channel</h4>
+            <p>
+                <button id="subscribeGeneral">Subscribe General</button>
+                <button id="unsubscribeGeneral">Unsubscribe General</button>
+                <br>
+                <label>
+                    <textarea disabled id="generalSubscriptions"></textarea>
+                </label>
+            </p>
+            <h4>Space Channel</h4>
+            <p>
+                <label><input type="text" id="spaceId" value="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"></label>
+                <button id="subscribeSpace">Subscribe</button>
+                <button id="unsubscribeSpace">Unsubscribe</button>
+                <br>
+                <label>
+                    <textarea disabled id="spaceSubscriptions"></textarea>
+                </label>
+            </p>
+            <h4>Server Channel</h4>
+            <p>
+                <label><input type="text" id="serverId" value="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"></label>
+                <button id="subscribeServer">Subscribe</button>
+                <button id="unsubscribeServer">Unsubscribe</button>
+                <br>
+                <label>
+                    <textarea disabled id="serverSubscriptions"></textarea>
+                </label>
+            </p>
+            <h4>Private Channel</h4>
+            <p>
+                <label><input type="text" id="privateId" value="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"></label>
+                <button id="subscribePrivate">Subscribe</button>
+                <button id="unsubscribePrivate">Unsubscribe</button>
+                <br>
+                <label>
+                    <textarea disabled id="privateSubscriptions"></textarea>
+                </label>
+            </p>
+        </div>
+        <div>
+            <h3>Messaging</h3>
+            <p>
+                <label>Message
+                    <input id="message" value="Hello, world!">
+                </label>
+                <label>
+                    Target Channel
+                    <select id="channelSelect"></select>
+                </label>
+                <button id="sendMessage">Send message</button>
+            </p>
+        </div>
+        <div>
+            <h3>Report action</h3>
+            <p>
+                <label>Action
+                    <input id="action" value="TestAction">
+                    <input id="details" value="User just sent the test action">
+                </label>
+                <button id="sendAction">Send action</button>
+            </p>
+        </div>
+        <div>
+            <h3>Update presence</h3>
+            <p>
+                <label>Presence
+                    <input id="presence" value="available">
+                </label>
+                <label>Presence Space
+                    <input id="presenceSpaceId" value="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX">
+                </label>
+                <label>Presence Server
+                    <input id="presenceServerId" value="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX">
+                </label>
+                <button id="sendPresence">Send presence</button>
+            </p>
+        </div>
+    </div>
+    <div class="half">
+        <pre id="output"></pre>
+    </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.1.0/uuidv4.min.js"></script>
+<script>
+    const wsMessageTypePush = 1;
+    const wsMessageTypeRequest = 2;
+    const wsMessageTypeResponse = 4;
+
+    const wsMessageTopicSystem = 1;
+    const wsMessageTopicChat = 2;
+    const wsMessageTopicAnalytics = 3;
+
+    const wsMessageMethodConnect = "connect";
+    const wsMessageMethodPresenceUpdate = "presenceUpdate";
+    const wsMessageMethodUserAction = "userAction";
+    const wsMessageMethodChannelSend = 'channelSend';
+    const wsMessageMethodChannelSubscribe = 'channelSubscribe';
+    const wsMessageMethodChannelUnsubscribe = 'channelUnsubscribe';
+
+    const wsSystemChannelId = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX";
+    const wsGlobalChannelId = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX";
+    const wsUserId = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX";
+
+    let socket = new WebSocket("ws://rpc.example.com/ws");
+    // let socket = new WebSocket("ws://127.0.0.1:8080/ws");
+
+    const sendMessage = messageStr => socket.send(messageStr);
+
+    const outputLines = [];
+    const outputArr = document.getElementById('output');
+
+    function updateLog(user = "", channel = "", message = "") {
+        outputLines.push(`${channel}: ${user}: ${message}`);
+        outputArr.textContent = outputLines.join('\n');
+    }
+
+    const userKeyInput = document.getElementById('userKey');
+    const messageInput = document.getElementById('message');
+    const actionInput = document.getElementById('action');
+    const actionDetailsInput = document.getElementById('details');
+    const spaceIdInput = document.getElementById('spaceId');
+    const serverIdInput = document.getElementById('serverId');
+    const privateIdInput = document.getElementById('privateId');
+    const presenceInput = document.getElementById('presence');
+    const presenceSpaceIdInput = document.getElementById('presenceSpaceId');
+    const presenceServerIdInput = document.getElementById('presenceServerId');
+
+    const getKey = () => userKeyInput.value;
+    const getSpaceId = () => spaceIdInput.value;
+    const getServerId = () => serverIdInput.value;
+    const getPrivateId = () => privateIdInput.value;
+    const getMessage = () => messageInput.value;
+    const getAction = () => actionInput.value;
+    const getActionDetails = () => actionDetailsInput.value;
+    const getPresence = () => presenceInput.value;
+    const getPresenceSpaceId = () => presenceSpaceIdInput.value;
+    const getPresenceServerId = () => presenceServerIdInput.value;
+
+    const channelSelect = document.getElementById('channelSelect');
+
+    function getSelectedChannelId() {
+        const selectedIndex = channelSelect.options.selectedIndex;
+        const options = channelSelect.options;
+        if (selectedIndex >= 0 && options[selectedIndex] != null) {
+            return options[selectedIndex].value;
+        }
+        return "";
+    }
+
+    function addChannel(channelId) {
+        const channelOption = document.createElement('option');
+        channelOption.appendChild(document.createTextNode(channelId));
+        channelOption.value = channelId;
+        channelSelect.appendChild(channelOption);
+    }
+
+    function removeChannel(channelId) {
+        for (let i = 0, n = channelSelect.options.length; i < n; i++) {
+            const o = channelSelect.options[i];
+            if (o.value === channelId) {
+                channelSelect.removeChild(o);
+            }
+        }
+    }
+
+    // Connect
+    const connectBtn = document.getElementById('connect');
+    connectBtn.onclick = () => requestConnect(getKey());
+
+    // General
+    const subscribeGeneralBtn = document.getElementById('subscribeGeneral');
+    subscribeGeneralBtn.onclick = () => {
+        requestSubscribe(getKey(), wsGlobalChannelId);
+    }
+    const unsubscribeGeneralBtn = document.getElementById('unsubscribeGeneral');
+    unsubscribeGeneralBtn.onclick = () => {
+        requestUnsubscribe(getKey(), wsGlobalChannelId);
+    }
+    const generalSubscriptionsArr = document.getElementById('generalSubscriptions');
+
+    // Space
+    const subscribeSpaceBtn = document.getElementById('subscribeSpace');
+    subscribeSpaceBtn.onclick = () => {
+        requestSubscribe(getKey(), getSpaceId());
+    }
+    const unsubscribeSpaceBtn = document.getElementById('unsubscribeSpace');
+    unsubscribeSpaceBtn.onclick = () => {
+        requestUnsubscribe(getKey(), getSpaceId());
+    }
+    const spaceSubscriptionsArr = document.getElementById('spaceSubscriptions');
+
+    // Server
+    const subscribeServerBtn = document.getElementById('subscribeServer');
+    subscribeServerBtn.onclick = () => {
+        requestSubscribe(getKey(), getServerId());
+    }
+    const unsubscribeServerBtn = document.getElementById('unsubscribeServer');
+    unsubscribeServerBtn.onclick = () => {
+        requestUnsubscribe(getKey(), getServerId());
+    }
+    const serverSubscriptionsArr = document.getElementById('serverSubscriptions');
+
+    // Private
+    const subscribePrivateBtn = document.getElementById('subscribePrivate');
+    subscribePrivateBtn.onclick = () => {
+        requestSubscribe(getKey(), getPrivateId());
+    }
+    const unsubscribePrivateBtn = document.getElementById('unsubscribePrivate');
+    unsubscribePrivateBtn.onclick = () => {
+        requestUnsubscribe(getKey(), getPrivateId());
+    }
+    const privateSubscriptionsArr = document.getElementById('privateSubscriptions');
+
+    // Send
+    const sendMessageBtn = document.getElementById('sendMessage');
+    sendMessageBtn.onclick = () => {
+        const channelId = getSelectedChannelId();
+        if (channelId) {
+            requestChannelSend(getKey(), channelId, getMessage());
+        }
+    };
+
+    // Send
+    const sendActionBtn = document.getElementById('sendAction');
+    sendActionBtn.onclick = () => {
+        const action = getAction();
+        const details = getActionDetails();
+        const reporterId = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX";
+        const userId = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX";
+
+        requestActionSend(getKey(), {action, details, reporterId, userId});
+    };
+
+    const sendPresenceBtn = document.getElementById('sendPresence');
+    sendPresenceBtn.onclick = () => {
+        const presence = getPresence();
+        const serverId = getPresenceServerId();
+        const spaceId = getPresenceSpaceId();
+
+        requestPresenceUpdate(getKey(), {status: presence, serverId: serverId, spaceId: spaceId});
+    };
+
+    // Connect
+    function requestConnect(key) {
+        /** @type {WebSocketsMessage} */
+        const msg = {
+            id: uuidv4(),
+            type: wsMessageTypeRequest,
+            topic: wsMessageTopicSystem,
+            method: wsMessageMethodConnect,
+            args: {key},
+        };
+
+        sendMessage(JSON.stringify(msg));
+
+        requestSubscribe(key, wsSystemChannelId);
+    }
+
+    // Subscribe
+    function requestSubscribe(key, channelId) {
+        /** @type {WebSocketsMessage} */
+        const msg = {
+            id: uuidv4(),
+            type: wsMessageTypeRequest,
+            topic: wsMessageTopicChat,
+            method: wsMessageMethodChannelSubscribe,
+            args: {key, channelId},
+        };
+
+        sendMessage(JSON.stringify(msg));
+    }
+
+    // Send
+    function requestChannelSend(key, channelId, message) {
+        /** @type {WebSocketsMessage} */
+        const msg = {
+            id: uuidv4(),
+            type: wsMessageTypeRequest,
+            topic: wsMessageTopicChat,
+            method: wsMessageMethodChannelSend,
+            args: {key, channelId, message},
+        };
+
+        sendMessage(JSON.stringify(msg));
+    }
+
+    // Send action
+    function requestActionSend(key, action) {
+        /** @type {WebSocketsMessage} */
+        const msg = {
+            id: uuidv4(),
+            type: wsMessageTypeRequest,
+            topic: wsMessageTopicAnalytics,
+            method: wsMessageMethodUserAction,
+            args: {key, action},
+        };
+
+        sendMessage(JSON.stringify(msg));
+    }
+
+    /**
+     * @param {string} key
+     * @param {Presence} presence
+     */
+    function requestPresenceUpdate(key, presence) {
+        /** @type {WebSocketsMessage} */
+        const msg = {
+            id: uuidv4(),
+            type: wsMessageTypeRequest,
+            topic: wsMessageTopicSystem,
+            method: wsMessageMethodPresenceUpdate,
+            args: {key, presence},
+        };
+
+        sendMessage(JSON.stringify(msg));
+    }
+
+    // Unsubscribe
+    function requestUnsubscribe(key, channelId) {
+        /** @type {WebSocketsMessage} */
+        const msg = {
+            id: uuidv4(),
+            type: wsMessageTypeRequest,
+            topic: wsMessageTopicChat,
+            method: wsMessageMethodChannelUnsubscribe,
+            args: {key, channelId},
+        };
+
+        sendMessage(JSON.stringify(msg));
+    }
+
+    // Connection open handler.
+    socket.onopen = function () {
+        console.log("[open] Connection established");
+    };
+
+    // On message received handler
+    socket.onmessage = function (event) {
+        console.log(`[message] Data received from server: ${event.data}`);
+
+        // We expect one or more messages to come in batch, split by the newline character.
+        const messageStr = event.data.split("\n");
+
+        messageStr.forEach(m => {
+            /** @type {WebSocketsMessage} */
+            const message = JSON.parse(m);
+
+            console.log(`[message]`, message);
+
+            if (message.payload) {
+                // Process incoming messages.
+                if (message.type !== wsMessageTypePush && message.payload.status !== 'ok') {
+                    console.error(`[error]`, message.payload);
+                } else {
+                    if (message.type === wsMessageTypeResponse) {
+                        if (message.topic === wsMessageTopicChat) {
+                            if (message.method === wsMessageMethodChannelSubscribe) {
+                                if (message.payload.status === 'ok') {
+                                    addChannel(message.payload.channelId);
+                                }
+                            } else if (message.method === wsMessageMethodChannelUnsubscribe) {
+                                if (message.payload.status === 'ok') {
+                                    removeChannel(message.payload.channelId);
+                                }
+                            }
+                        }
+                    }
+
+                    /** @type {WebSocketsPayload} */
+                    const payload = message.payload;
+                    let msg, name;
+
+                    if (payload.message) {
+                        msg = payload.message;
+                    }
+
+                    if (payload.sender) {
+                        name = payload.sender.name;
+                    }
+
+                    updateLog(name, `${payload.category}->${payload.channelId}`, msg);
+                }
+            } else {
+                if (message.args) {
+                    console.warn(`[warn]`, message);
+                }
+            }
+        });
+    };
+
+    socket.onclose = function (event) {
+        if (event.wasClean) {
+            console.log(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+        } else {
+            // e.g. server process killed or network down
+            // event.code is usually 1006 in this case
+            console.warn('[close] Connection died', event);
+        }
+    };
+
+    socket.onerror = function (error) {
+        console.log(`[error] ${error.message}`);
+    };
+
+    /**
+     * @function uuidv4
+     * @returns {string}
+     */
+
+    /**
+     * @typedef {Object} WebSocketsSender
+     * @property {string} id
+     * @property {string} name
+     */
+
+    /**
+     * @typedef {Object} WebSocketsPayload
+     * @property {string} key
+     * @property {string} channelId
+     * @property {string} category
+     * @property {string} message
+     * @property {WebSocketsSender} sender
+     * @property {'ok'|'error'} status
+     */
+
+    /**
+     * @typedef {Object} WebSocketsMessage
+     * @property {string} id
+     * @property {number} type
+     * @property {number} topic
+     * @property {string} method
+     * @property {WebSocketsPayload} payload
+     * @property {WebSocketsPayload} args
+     */
+
+    /**
+     * @typedef {Object} Presence
+     * @property {string} userId
+     * @property {string} spaceId
+     * @property {string} serverId
+     * @property {'away'|'available'|'playing'|'offline'} status
+     */
+</script>
+</body>
+</html>

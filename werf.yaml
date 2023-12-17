@@ -1,0 +1,6 @@
+project: veverse-rpc
+configVersion: 1
+
+---
+image: rpc
+dockerfile: Dockerfile
